@@ -24,6 +24,12 @@ public class Point3D {
         this._y = new Coordinate(y);
         this._z = new Coordinate(z);
     }
+    //constructor that receive a variable of type Point3D
+    public Point3D(Point3D p) {
+        this._x = new Coordinate(p.getX());
+        this._y = new Coordinate(p.getY());
+        this._z = new Coordinate(p.getZ());
+    }
 
     /**
      * @return cordinate x

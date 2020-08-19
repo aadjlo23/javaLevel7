@@ -7,6 +7,7 @@ import geometries.Intersectable.GeoPoint;
 import primitives.*;
 import scene.Scene;
 
+import java.util.Arrays;
 import java.util.List;
 
 import static primitives.Util.alignZero;
@@ -34,6 +35,40 @@ public class Render {
         _imageWriter = imgWr;
     }
 
+    /**
+     * this function crat a image with improvements
+     */
+
+    public void renderImageAdvanced(boolean onOrOff ) {
+        Camera camera = _scene.getCamera();
+        Intersectable geometries = _scene.getGeometries();
+        java.awt.Color background = _scene.getBackground().getColor();
+
+        //Nx and Ny are the number of pixels in the rows and columns of the view plane
+        int nX = _imageWriter.getNx();
+        int nY = _imageWriter.getNy();
+
+        //width and height are the width and height of the image.
+        double width = _imageWriter.getWidth();
+        double height = _imageWriter.getHeight();
+
+        double distance = _scene.getDistance();
+
+
+        for (int row = 0; row < nY; ++row)
+            for (int column = 0; column < nX; ++column) {
+                Ray ray = camera.constructRayThroughPixel(nX, nY, column, row, distance, width, height);
+                GeoPoint closestPoint = findClosestIntersection(ray);
+                if (onOrOff) {
+                    List<Ray> rayList = camera.constructBeamThroughPixel(nX, nY, column, row, distance, width, height);
+                    _imageWriter.writePixel(column, row, closestPoint == null ? background : averageColor(rayList).getColor());
+
+                }
+                else{
+
+                }
+            }
+    }
     /**
      * this func create an image
      */
@@ -65,6 +100,7 @@ public class Render {
                 }
             }
     }
+
     /**
      * the function should find the intercetion most close
      *
@@ -87,38 +123,7 @@ public class Render {
         }
         return closestPoint;
     }
-    /**
-     * Finding the closest point to the P0 of the camera.
-     *
-     * @param intersectionPoints list of points, the function should find from
-     *                           this list the closet point to P0 of the camera in the scene.
-     * @return the closest point to the camera
-     */
-    private GeoPoint getClosestPoint(List<GeoPoint> intersectionPoints) {
-        Intersectable.GeoPoint result = null;
-        double minDist = Double.POSITIVE_INFINITY;
 
-        Point3D p0 = this._scene.getCamera().getP0();
-
-        for (Intersectable.GeoPoint pt : intersectionPoints) {
-            double distance = p0.distance(pt._point);
-            if (distance < minDist) {
-                minDist = distance;
-                result = pt;
-            }
-        }
-
-        return result;
-    }
-
-    /**
-     *
-     * @param val
-     * @return boolean value if double and val>0
-     */
-    private boolean sign(double val) {
-        return (val > 0d);
-    }
 
     /**
      * function to draw a grid on our image by pixel
@@ -134,29 +139,7 @@ public class Render {
             }
         }
     }
-    /**
-     * unshaded function check if specific ray from light source to geometry passes through other geometry
-     *
-     * @param l        vector from light source to point on geometry
-     * @param n   a unit vector from, vertical to intersection point.
-     * @param geoPoint current geoPoint (the intersection point)
-     * @return true if there is no hindrance, and false otherwise
-     */
-    private boolean unshaded(LightSource light, Vector l, Vector n, GeoPoint geoPoint) {
-        Vector lightDirection = l.scale(-1); // from point to light source
-        Ray lightRay = new Ray(geoPoint._point, lightDirection, n);
-        Point3D point = geoPoint._point;
-        List<GeoPoint> intersections = _scene.getGeometries().findIntersections(lightRay);
-        if (intersections == null)
-            return true;
-        double lightDistance = light.getDistance(point);
-        for (GeoPoint gp : intersections) {
-            double t = gp._point.distance(point) - lightDistance;
-            if (alignZero(t) <= 0 && gp._geometry.getMaterial().getKt() == 0)
-                return false;
-        }
-        return true;
-    }
+
 
     /**
      * Calc the color intensity in a intersection point
@@ -170,7 +153,7 @@ public class Render {
                 _scene.getAmbientLight().getIntensity());
     }
     /**
-     * Calculate the color intensity in a point approach phong model
+     * Calculate the color intensity in a point with a phong model approach
      *
      * @return the color intensity
      */
@@ -217,7 +200,7 @@ public class Render {
         return result;
     }
     /**
-     * func calc the level of transparency
+     * this function calculate the level of transparency
      *
      * @param light lightsource
      * @param l  l
@@ -276,6 +259,7 @@ public class Render {
         return lightIntensity.scale(kD * Math.abs(l.dotProduct(n)));
     }
     /**
+    /**
      * Create the image file in jpeg format
      */
     public void writeToImage() {
@@ -284,9 +268,9 @@ public class Render {
     /**
      * Returns reflected Ray
      *
-     * @param point
-     * @param ray
-     * @param n
+     * @param point the point of the ray
+     * @param ray the ray
+     * @param n the vector
      * @return reflected ray
      */
     private Ray constructReflectedRay(Point3D point, Ray ray, Vector n){
@@ -295,14 +279,44 @@ public class Render {
         return new Ray(point, reflectedDirection, n);
     }
     /**
+     * Calculates reflected color on point according to Phong model.
+     * Calls for recursive helping function.
+     *
+     * @param geopoint
+     * @param inRay
+     * @return
+     */
+    private Color calcColorAdvanced(GeoPoint geopoint, Ray inRay) {
+        return calcColor(geopoint, inRay, MAX_CALC_COLOR_LEVEL, 1.0).add(
+                _scene.getAmbientLight().getIntensity());
+    }
+    /**
      * this func calc the refracted ray
      *
+     * @param n the vector
      * @param point point
      * @param inRay ray
      * @return the ref ray
      */
     private Ray constructRefractedRay(Vector n, GeoPoint point, Ray inRay) {
         return new Ray(point._point, inRay.getDirection(), n);
+    }
+
+    /**
+     * Calculate the average of a color in a pixel
+     *
+     * @param rayBeam
+     * @return
+     */
+    private Color averageColor(List<Ray> rayBeam) {
+        java.awt.Color background = _scene.getBackground().getColor();
+        Color color = new Color(0, 0, 0);
+        for (Ray ray : rayBeam) {
+            color = findClosestIntersection(ray) == null ? color.add(_scene.getBackground())
+                    : color.add(calcColorAdvanced(findClosestIntersection(ray), ray));
+        }
+
+        return color.reduce(rayBeam.size());
     }
 }
 
